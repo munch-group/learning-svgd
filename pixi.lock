@@ -38,6 +38,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/decorator-5.2.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/defusedxml-0.7.1-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/dm-tree-0.1.9-py313h35fcee7_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/equinox-0.13.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.2.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/fonttools-4.58.5-py313ha9b7d5b_0.conda
@@ -61,6 +62,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/isoduration-20.11.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/jax-0.6.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/jaxlib-0.6.0-cpu_py313ha57edf9_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/jaxtyping-0.3.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/jedi-0.19.2-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/jinja2-3.1.6-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/json5-0.12.0-pyhd8ed1ab_0.conda
@@ -200,6 +202,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2025b-h78e105d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/uri-template-1.3.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/urllib3-2.5.0-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/wadler-lindig-0.1.5-pyh29332c3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/wcwidth-0.2.13-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/webcolors-24.11.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/webencodings-0.5.1-pyhd8ed1ab_3.conda
@@ -575,6 +578,19 @@ packages:
   license_family: Apache
   size: 110756
   timestamp: 1741892235087
+- conda: https://conda.anaconda.org/conda-forge/noarch/equinox-0.13.0-pyhd8ed1ab_0.conda
+  sha256: 706e5f451e08d258b3f9d3247843f2e516c3b42c79c5090d60031ee9dd615e2c
+  md5: 417293acc0128e16e812f5ced4acee17
+  depends:
+  - jax >=0.4.38
+  - jaxtyping >=0.2.20
+  - python >=3.10
+  - typing_extensions >=4.5.0
+  - wadler-lindig >=0.1.0
+  license: Apache-2.0
+  license_family: APACHE
+  size: 130177
+  timestamp: 1751967690754
 - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.3.0-pyhd8ed1ab_0.conda
   sha256: ce61f4f99401a4bd455b89909153b40b9c823276aefcbb06f2044618696009ca
   md5: 72e42d28960d875c7654614f8b50939a
@@ -865,6 +881,16 @@ packages:
   license_family: APACHE
   size: 51815557
   timestamp: 1748656482648
+- conda: https://conda.anaconda.org/conda-forge/noarch/jaxtyping-0.3.2-pyhd8ed1ab_0.conda
+  sha256: c8f51056484f23a8a2a47540155095d099983ff8bc03a9b064effa9c8157cf5c
+  md5: 4a3e5a04f0d9ee0d00a1cdd686e5c60f
+  depends:
+  - python >=3.10
+  - wadler-lindig >=0.1.3
+  license: MIT
+  license_family: MIT
+  size: 47541
+  timestamp: 1747196575946
 - conda: https://conda.anaconda.org/conda-forge/noarch/jedi-0.19.2-pyhd8ed1ab_1.conda
   sha256: 92c4d217e2dc68983f724aa983cca5464dcb929c566627b26a2511159667dba8
   md5: a4f4c5dc9b80bc50e0d3dc4e6e8f1bd9
@@ -2556,6 +2582,16 @@ packages:
   license_family: MIT
   size: 101735
   timestamp: 1750271478254
+- conda: https://conda.anaconda.org/conda-forge/noarch/wadler-lindig-0.1.5-pyh29332c3_0.conda
+  sha256: c79787674fd49820a9b01453a2cbef0726fff14bb8154dbd33d44911eec13999
+  md5: 2c4e0dd8f3f468f24684a3e6e394efa0
+  depends:
+  - python >=3.10
+  - python
+  license: Apache-2.0
+  license_family: APACHE
+  size: 27475
+  timestamp: 1744605034911
 - conda: https://conda.anaconda.org/conda-forge/noarch/wcwidth-0.2.13-pyhd8ed1ab_1.conda
   sha256: f21e63e8f7346f9074fd00ca3b079bd3d2fa4d71f1f89d5b6934bf31446dc2a5
   md5: b68980f2495d096e71c7fd9d7ccf63e6
