@@ -114,7 +114,12 @@ def check_and_apply_theme():
     if not any(x in os.environ for x in ["VSCODE_PID", "VSCODE_CWD", "JPY_PARENT_PID"]):
         return
 
-    settings_path = get_vscode_user_settings_dir() / "settings.json"
+    settings_dir = get_vscode_user_settings_dir()
+    settings_path = settings_dir / "settings.json"
+    if not settings_dir.exists():
+        settings_dir.mkdir(parents=True)
+        with open(settings_path, 'w') as f:
+            pass
     with open(settings_path, 'r') as f:
         theme = None
         for line in f:

@@ -2,7 +2,7 @@
 authors = ["Kasper Munch <kaspermunch@birc.au.dk>"]
 channels = ["conda-forge"]
 name = "svgd"
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "linux-aarch64"]
 version = "0.1.0"
 
 [tasks]
@@ -20,3 +20,5 @@ jupyter = ">=1.1.1,<2"
 ipywidgets = ">=8.1.7,<9"
 equinox = ">=0.13.0,<0.14"
 jaxlib = ">=0.6.0,<0.7"
+pip = ">=25.1.1,<26"
+ipykernel = ">=6.29.5,<7"
