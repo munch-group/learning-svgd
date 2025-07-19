@@ -30,20 +30,54 @@ from jax.interpreters import ad
 # Load C++ shared library with dph_pmf_param
 lib = ctypes.CDLL("./libdph_param.so")
 
-# Register the custom call with XLA
-from jax.lib import xla_client
-try:
-    # Try to register the custom call target
-    for platform in ['cpu']:
+# Create proper PyCapsule for JAX registration
+def create_dph_capsule():
+    """Create a PyCapsule for the DPH function"""
+    import ctypes
+    from ctypes import pythonapi, c_void_p, c_char_p
+    
+    # Get the function pointer
+    func_ptr = lib.dph_pmf_param
+    
+    # Create a PyCapsule containing the function pointer
+    PyCapsule_New = pythonapi.PyCapsule_New
+    PyCapsule_New.argtypes = [c_void_p, c_char_p, c_void_p]
+    PyCapsule_New.restype = ctypes.py_object
+    
+    capsule = PyCapsule_New(
+        ctypes.cast(func_ptr, c_void_p).value,
+        b"xla._CUSTOM_CALL_TARGET",
+        None
+    )
+    
+    return capsule
+
+# Register the function with XLA using the proper PyCapsule
+def register_dph_function():
+    """Register the DPH function with XLA using PyCapsule"""
+    try:
+        from jax._src.lib import xla_client
+        
+        # Create the PyCapsule
+        capsule = create_dph_capsule()
+        
+        # Register with XLA using the capsule
         xla_client.register_custom_call_target(
             name="dph_pmf_param",
-            fn=lib.dph_pmf_param,
-            platform=platform,
+            fn=capsule,  # Use the capsule instead of the raw function pointer
+            platform="cpu"
         )
-    print("Successfully registered custom call target")
-except Exception as e:
-    print(f"Warning: Could not register custom call target: {e}")
-    print("Falling back to Python implementation")
+        print("Successfully registered dph_pmf_param with XLA using PyCapsule")
+        return True
+        
+    except Exception as e:
+        print(f"Registration failed: {e}")
+        return False
+
+# Try to register the function
+registration_success = register_dph_function()
+
+print(f"C++ library loaded. Registration success: {registration_success}")
 
 # # Import the custom JAX extension module
 # #import ptdalgorithms._core
@@ -102,25 +136,23 @@ def register_dph_kernel(name: str, fallback=None):
             if expected_size != theta_size:
                 raise ValueError(f"Invalid theta size {theta_size} for computed m={m}. Expected {expected_size}")
             
-            # Pack m and n into opaque data (little-endian int64)
-            opaque = struct.pack("QQ", m, n)  # Two 64-bit unsigned integers
+            # Since we can't pass opaque data, we'll create additional scalar operands for m and n
+            m_operand = mlir.ir_constant(jnp.array(m, dtype=jnp.int64))
+            n_operand = mlir.ir_constant(jnp.array(n, dtype=jnp.int64))
 
             call_op = custom_call(
                 call_target_name=name.encode(),
                 result_types=[out_type],
-                operands=[theta, times],
-                operand_layouts=[theta_layout, times_layout],
+                operands=[theta, times, m_operand, n_operand],
+                operand_layouts=[theta_layout, times_layout, [], []],  # scalars have empty layout
                 result_layouts=[times_layout],
-                opaque=opaque,
             )
             
             return call_op.results
         
         mlir.register_lowering(prim, lowering, platform="cpu")
 
-#        @prim.def_jvp
         def jvp(primals, tangents):
-
             theta, times = primals
             dtheta, dtimes = tangents
 
@@ -129,12 +161,17 @@ def register_dph_kernel(name: str, fallback=None):
             f0 = f(theta, times)
 
             if dtheta is not None:
-                def compute_partial_grad(i):
-                    theta_plus = theta.at[i].add(eps)
-                    theta_minus = theta.at[i].add(-eps)
-                    return dtheta[i] * (f(theta_plus, times) - f(theta_minus, times)) / (2 * eps)
+                # Use a simpler gradient computation to avoid batching issues
+                def compute_gradient():
+                    grad_list = []
+                    for i in range(theta.shape[0]):
+                        theta_plus = theta.at[i].add(eps)
+                        theta_minus = theta.at[i].add(-eps)
+                        grad_i = (f(theta_plus, times) - f(theta_minus, times)) / (2 * eps)
+                        grad_list.append(dtheta[i] * grad_i)
+                    return jnp.sum(jnp.stack(grad_list), axis=0)
                 
-                grad_theta = jnp.sum(jax.vmap(compute_partial_grad)(jnp.arange(theta.shape[0])), axis=0)
+                grad_theta = compute_gradient()
             else:
                 grad_theta = jnp.zeros_like(times)
 
@@ -154,12 +191,14 @@ def register_dph_kernel(name: str, fallback=None):
 
 def python_dph_pmf(theta, times):
     """JAX-compatible Python implementation of DPH PMF"""
+
+    print(" - Using Python fallback impl.")
+
     # Dynamically determine m from theta size
     theta_size = theta.shape[0]
     # Solve m^2 + 2m - theta_size = 0
     import math
     m = int((-1 + math.sqrt(1 + 4 * theta_size)) / 2)
-    
     # Extract parameters from theta
     alpha = theta[:m]  # initial distribution
     T = theta[m:m+m*m].reshape((m, m))  # transition matrix
@@ -186,7 +225,15 @@ def python_dph_pmf(theta, times):
 
 # For now, just use the Python implementation directly
 # This avoids the custom call registration issues
-dph_pmf = python_dph_pmf
+# dph_pmf = python_dph_pmf
+
+# Use Python fallback that works with JIT and gradients
+python_fallback_fn = python_dph_pmf
+
+dph_pmf = register_dph_kernel(
+    "dph_pmf_param", 
+    fallback=python_fallback_fn
+)(lambda theta, times: None)  # <- to register the two positional arguments
 
 # dph_pdf = register_dph_kernel("dph_pdf_param")(lambda theta, times: None)
 # # and so on...
@@ -211,12 +258,16 @@ def dph_negloglik(theta, t_obs):
     pmfs = dph_pmf(theta, t_obs)
     return -jnp.sum(jnp.log(pmfs + 1e-8))
 
+def grad_dph_negloglik(theta, t_obs):
+    """Gradient of negative log-likelihood for DPH"""
+    # Use JAX's automatic differentiation
+    return jax.grad(dph_negloglik)(theta, t_obs)
+
 # ----------------------
 # Usage Example
 # ----------------------
 if __name__ == "__main__":
-    print("Testing DPH implementation with dynamic dimensions via opaque data")
-    
+
     # Test 1: m=2 case
     print("\n=== Test 1: m=2 DPH ===")
     m = 2
@@ -253,22 +304,44 @@ if __name__ == "__main__":
     print(f"DPH parameters (theta): {theta3}")
     print(f"Shape: {theta3.shape} (expected: {m + m*m + m} = {m*(m+2)})")
     
-    # Test the pmf function
+    # Test the python pmf function
     pmfs3 = dph_pmf(theta3, t_obs)
     print(f"PMF values (m=3): {pmfs3}")
     
+    # Test the negative log-likelihood function without JIT
+    print("\n=== Testing negative log-likelihood ===")
+    print(dph_negloglik(theta2, t_obs))
+
+    # print("\n=== Testing it is the same using jist and not  ===")
+    # print(jax.jit(dph_negloglik)(theta2, t_obs) - dph_negloglik(theta2, t_obs))
+
+    # test that grad works in jit
+
     # Test JIT compilation and gradients for both cases
-    print("\n=== Testing JIT and gradients ===")
     
     # Test m=2 case
+    print("Loss with jit dph_negloglik")
     loss2 = jax.jit(dph_negloglik)(theta2, t_obs)
+    print(f"m=2 - Loss: {loss2:.6f}")
+
+    print("Loss with jit loglik and jit grad")
     grads2 = jax.grad(dph_negloglik)(theta2, t_obs)
-    print(f"m=2 - Loss: {loss2:.6f}, Gradient norm: {jnp.linalg.norm(grads2):.6f}")
+    print(f"m=2 - Loss: {loss2:.6f}")
+
+
+    grads2 = jax.jit(grad_dph_negloglik)(theta2, t_obs)
+
+
+    print(f"m=2 - Gradient norm: {jnp.linalg.norm(grads2):.6f}")
     
+
+
     # Test m=3 case  
     loss3 = jax.jit(dph_negloglik)(theta3, t_obs)
+    print(f"m=3 - Loss: {loss3:.6f}")
+
     grads3 = jax.grad(dph_negloglik)(theta3, t_obs)
-    print(f"m=3 - Loss: {loss3:.6f}, Gradient norm: {jnp.linalg.norm(grads3):.6f}")
+    print(f"m=3 - Gradient norm: {jnp.linalg.norm(grads3):.6f}")
     
     print("\nBoth cases working! Opaque data successfully passes m and n to C++ function.")
 

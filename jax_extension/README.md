@@ -17,3 +17,4 @@ You should see:
     000000000000xxxx T dph_pmf_param
 
 
+git submodule add https://github.com/USCiLab/cereal.git extern/cereal
