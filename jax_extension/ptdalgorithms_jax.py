@@ -10,6 +10,9 @@ Supports:
 
 import os
 os.environ['JAX_ENABLE_X64'] = 'True'
+# Disable JAX compilation cache to avoid HDF5 issues
+# os.environ['JAX_COMPILATION_CACHE_DIR'] = ''
+# os.environ['JAX_DISABLE_JIT'] = '0'  # Keep JIT enabled but disable caching
 
 import struct
 
@@ -27,7 +30,7 @@ import jax.interpreters.mlir as mlir
 from jax.interpreters import ad
 #from jax import ad
 
-# Load C++ shared library with dph_pmf_param
+# Load C++ shared library with ptdalgorithms_jax
 lib = ctypes.CDLL("./libdph_param.so")
 
 # Create proper PyCapsule for JAX registration
@@ -37,7 +40,7 @@ def create_dph_capsule():
     from ctypes import pythonapi, c_void_p, c_char_p
     
     # Get the function pointer
-    func_ptr = lib.dph_pmf_param
+    func_ptr = lib.ptdalgorithms_jax
     
     # Create a PyCapsule containing the function pointer
     PyCapsule_New = pythonapi.PyCapsule_New
@@ -63,11 +66,11 @@ def register_dph_function():
         
         # Register with XLA using the capsule
         xla_client.register_custom_call_target(
-            name="dph_pmf_param",
+            name="ptdalgorithms_jax",
             fn=capsule,  # Use the capsule instead of the raw function pointer
             platform="cpu"
         )
-        print("Successfully registered dph_pmf_param with XLA using PyCapsule")
+        print("Successfully registered ptdalgorithms_jax with XLA using PyCapsule")
         return True
         
     except Exception as e:
@@ -192,7 +195,7 @@ def register_dph_kernel(name: str, fallback=None):
 def python_dph_pmf(theta, times):
     """JAX-compatible Python implementation of DPH PMF"""
 
-    print(" - Using Python fallback impl.")
+    # print(" - Using Python fallback impl.")
 
     # Dynamically determine m from theta size
     theta_size = theta.shape[0]
@@ -231,7 +234,7 @@ def python_dph_pmf(theta, times):
 python_fallback_fn = python_dph_pmf
 
 dph_pmf = register_dph_kernel(
-    "dph_pmf_param", 
+    "ptdalgorithms_jax", 
     fallback=python_fallback_fn
 )(lambda theta, times: None)  # <- to register the two positional arguments
 
@@ -285,64 +288,25 @@ if __name__ == "__main__":
     t_obs = jnp.array([1, 2, 3], dtype=jnp.int64)
     print(f"Times to evaluate: {t_obs}")
 
-    # Test the pmf function
+    print("\n=== Test the pmf function ===")
     pmfs2 = dph_pmf(theta2, t_obs)
     print(f"PMF values (m=2): {pmfs2}")
-    
-    # Test 2: m=3 case
-    print("\n=== Test 2: m=3 DPH ===")
-    m = 3
-    # Create a valid DPH parameter vector for m=3
-    alpha = jnp.array([0.5, 0.3, 0.2])  # initial distribution
-    T = jnp.array([[0.4, 0.1, 0.1],     # transition matrix 
-                   [0.2, 0.3, 0.1],     
-                   [0.1, 0.2, 0.4]])    
-    t = jnp.array([0.4, 0.4, 0.3])      # exit probabilities
-    
-    # Concatenate into theta vector
-    theta3 = jnp.concatenate([alpha, T.flatten(), t])
-    print(f"DPH parameters (theta): {theta3}")
-    print(f"Shape: {theta3.shape} (expected: {m + m*m + m} = {m*(m+2)})")
-    
-    # Test the python pmf function
-    pmfs3 = dph_pmf(theta3, t_obs)
-    print(f"PMF values (m=3): {pmfs3}")
-    
-    # Test the negative log-likelihood function without JIT
-    print("\n=== Testing negative log-likelihood ===")
-    print(dph_negloglik(theta2, t_obs))
+        
+    print("\n=== Tes dph_negloglik without JIT ===")
+    loss2 = dph_negloglik(theta2, t_obs)
+    print(f"m=2 - Loss: {loss2:.6f}")
 
-    # print("\n=== Testing it is the same using jist and not  ===")
-    # print(jax.jit(dph_negloglik)(theta2, t_obs) - dph_negloglik(theta2, t_obs))
-
-    # test that grad works in jit
-
-    # Test JIT compilation and gradients for both cases
-    
-    # Test m=2 case
-    print("Loss with jit dph_negloglik")
+    print("\n=== Tets dph_negloglik with JIT ===")
     loss2 = jax.jit(dph_negloglik)(theta2, t_obs)
     print(f"m=2 - Loss: {loss2:.6f}")
 
-    print("Loss with jit loglik and jit grad")
+
+    print("Loss with jit loglik and grad")
     grads2 = jax.grad(dph_negloglik)(theta2, t_obs)
     print(f"m=2 - Loss: {loss2:.6f}")
 
-
+    print("Loss with jit loglik and jit grad")
     grads2 = jax.jit(grad_dph_negloglik)(theta2, t_obs)
-
-
     print(f"m=2 - Gradient norm: {jnp.linalg.norm(grads2):.6f}")
     
-
-
-    # Test m=3 case  
-    loss3 = jax.jit(dph_negloglik)(theta3, t_obs)
-    print(f"m=3 - Loss: {loss3:.6f}")
-
-    grads3 = jax.grad(dph_negloglik)(theta3, t_obs)
-    print(f"m=3 - Gradient norm: {jnp.linalg.norm(grads3):.6f}")
-    
-    print("\nBoth cases working! Opaque data successfully passes m and n to C++ function.")
-
 
